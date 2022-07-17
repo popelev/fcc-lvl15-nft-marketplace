@@ -11,11 +11,7 @@ error NftMarketplace__AlreadyListed(address nftAddress, uint256 tokenId);
 error NftMarketplace__NotListed(address nftAddress, uint256 tokenId);
 error NftMarketplace__NoProceeds();
 error NftMarketplace__NotOwner();
-error NftMarketplace__PriceNotMet(
-    address nftAddress,
-    uint256 tokenId,
-    uint256 price
-);
+error NftMarketplace__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
 error NftMarketplace__TransferFailed();
 
 contract NftMarketplace is ReentrancyGuard {
@@ -54,6 +50,8 @@ contract NftMarketplace is ReentrancyGuard {
     );
     event ItemCanceled(address owner, address nftAddress, uint256 tokenId);
 
+    event ProceedsWithdrawed(address indexed recieveAddress, uint256 value);
+
     /* CONSTRUCTOR */
     constructor() {}
 
@@ -83,23 +81,13 @@ contract NftMarketplace is ReentrancyGuard {
     {
         Listing memory listedItem = s_listings[nftAddress][tokenId];
         if (msg.value < listedItem.price) {
-            revert NftMarketplace__PriceNotMet(
-                nftAddress,
-                tokenId,
-                listedItem.price
-            );
+            revert NftMarketplace__PriceNotMet(nftAddress, tokenId, listedItem.price);
         }
-        s_proceeds[listedItem.seller] =
-            s_proceeds[listedItem.seller] +
-            msg.value;
+        s_proceeds[listedItem.seller] = s_proceeds[listedItem.seller] + msg.value;
 
         delete (s_listings[nftAddress][tokenId]);
 
-        IERC721(nftAddress).safeTransferFrom(
-            listedItem.seller,
-            msg.sender,
-            tokenId
-        );
+        IERC721(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId);
 
         emit ItemBought(listedItem.seller, msg.sender, tokenId, msg.value);
     }
@@ -127,13 +115,14 @@ contract NftMarketplace is ReentrancyGuard {
         emit ItemUpdated(msg.sender, nftAddress, tokenId, newPrice);
     }
 
-    function withdrawProceeds() external ProceedsAboveZero(msg.sender) {
+    function withdrawProceeds(address recieveAddress) external ProceedsAboveZero(msg.sender) {
         uint256 proceeds = s_proceeds[msg.sender];
         s_proceeds[msg.sender] = 0;
-        (bool success, ) = payable(msg.sender).call{value: proceeds}("");
+        (bool success, ) = payable(recieveAddress).call{value: proceeds}("");
         if (!success) {
             revert NftMarketplace__TransferFailed();
         }
+        emit ProceedsWithdrawed(recieveAddress, proceeds);
     }
 
     /* MODIFIERS */
@@ -182,9 +171,10 @@ contract NftMarketplace is ReentrancyGuard {
 
     /* GETTERS */
 
-    function listItem(address nftAddress, uint256 tokenId)
+    function getListedItem(address nftAddress, uint256 tokenId)
         external
         view
+        IsListed(nftAddress, tokenId)
         returns (Listing memory)
     {
         return s_listings[nftAddress][tokenId];
