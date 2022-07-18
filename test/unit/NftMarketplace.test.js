@@ -142,6 +142,12 @@ const { developmentChains, networkConfig } = require("../../helper-hardhat-confi
                       nftMarketplace.updateItem(basicNft.address, TOKEN_ID, 0)
                   ).to.be.revertedWith("NftMarketplace__PriceMustBeAboveZero")
               })
+              it("not owner nft can not update list", async function () {
+                  await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
+                  await expect(
+                      nftMarketplaceUser1.updateItem(basicNft.address, TOKEN_ID, PRICE)
+                  ).to.be.revertedWith("NftMarketplace__NotOwner")
+              })
           })
           describe("cancel list", async function () {
               it("owner can cancel listing", async function () {
@@ -202,11 +208,20 @@ const { developmentChains, networkConfig } = require("../../helper-hardhat-confi
                   proceeds = await nftMarketplace.getProceeds(deployerAddress)
                   assert(proceeds.isZero())
               })
-              it("reverted if withdraw failed", async function () {
+              it("reverted if withdraw transaction failed", async function () {
+                  await nftMarketplace.listItem(basicNft.address, TOKEN_ID, PRICE)
+                  await nftMarketplaceUser1.buyItem(basicNft.address, TOKEN_ID, {
+                      value: PRICE,
+                  })
                   const emptyContract = await ethers.getContract("EmptyContract", deployerAddress)
                   await expect(
                       nftMarketplace.withdrawProceeds(emptyContract.address)
                   ).to.be.revertedWith("NftMarketplace__TransferFailed")
+              })
+              it("reverted if proceeds is zero", async function () {
+                  await expect(nftMarketplace.withdrawProceeds(deployerAddress)).to.be.revertedWith(
+                      "NftMarketplace__NoProceeds"
+                  )
               })
           })
 
